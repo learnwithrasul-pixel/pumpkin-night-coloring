@@ -1,0 +1,385 @@
+<title>Pumpkin Night Coloring</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Layout: one-screen app. Page tabs on top, drawing paper in the middle, crayon tray beside it (below it on phones). */
+:root {
+  --bg: #f1e9fb;        /* pale twilight lilac */
+  --paper: #ffffff;
+  --ink: #2b1d3d;       /* night plum for text */
+  --tray: #fff6ea;      /* crayon box cardboard */
+  --edge: #dccbef;
+  --accent: #ff7a1a;    /* pumpkin orange for the active tool */
+  --display: "Fredoka", "Baloo 2", "Comic Sans MS", system-ui, sans-serif;
+  --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body);
+  display: flex; flex-direction: column; overflow: hidden;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 10px;
+  box-sizing: border-box; gap: 10px;
+  -webkit-user-select: none; user-select: none;
+}
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-weight: 600; font-size: 1.35rem; margin: 0; letter-spacing: .01em; }
+.pages { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; min-width: 0; flex: 1; }
+.pages button {
+  flex: 0 0 auto; width: 54px; height: 54px; border-radius: 14px; border: 3px solid var(--edge);
+  background: var(--paper); padding: 4px; cursor: pointer;
+}
+.pages button img { width: 100%; height: 100%; display: block; }
+.pages button[aria-pressed="true"] { border-color: var(--accent); }
+main { flex: 1; min-height: 0; min-width: 0; display: flex; gap: 12px; }
+.stage { flex: 1; min-width: 0; min-height: 0; display: grid; place-items: center; }
+.paper { position: relative; aspect-ratio: 1; height: 100%; max-height: 100%; max-width: 100%;
+  background: var(--paper); border-radius: 18px; box-shadow: 0 6px 0 var(--edge); overflow: hidden; touch-action: none; }
+.paper canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#lines { pointer-events: none; }
+.tray { width: 200px; background: var(--tray); border: 3px solid var(--edge); border-radius: 18px; padding: 12px;
+  display: flex; flex-direction: column; gap: 12px; overflow-y: auto; box-sizing: border-box; }
+.label { font-family: var(--display); font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; opacity: .7; }
+.example img { display: block; width: 100%; aspect-ratio: 1; border-radius: 12px; border: 3px solid var(--edge); background: var(--paper); box-sizing: border-box; }
+.colors { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.crayon { min-width: 0; aspect-ratio: 1; border-radius: 50%; border: 3px solid rgba(0,0,0,.12); cursor: pointer; padding: 0; }
+.crayon[aria-pressed="true"] { outline: 4px solid var(--ink); outline-offset: 2px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.tool, .act {
+  font-family: var(--display); font-size: .95rem; border: 3px solid var(--edge); background: var(--paper);
+  color: var(--ink); border-radius: 12px; padding: 8px 10px; cursor: pointer; flex: 1 1 auto; min-height: 44px;
+}
+.tool[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: #fff; }
+.size { width: 44px; height: 44px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; }
+.size span { display: block; border-radius: 50%; background: var(--ink); }
+.size[aria-pressed="true"] { border-color: var(--accent); }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 700px) {
+  main { flex-direction: column; }
+  .tray { width: 100%; min-width: 0; flex-direction: row; flex-wrap: wrap; overflow: visible; padding: 10px; gap: 8px; }
+  .tray .group { flex: 1 1 100%; }
+  .tray .group.example { flex: 0 0 80px; }
+  .tray .group.crayons { flex: 1 1 0; min-width: 0; }
+  .colors { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+  .label { display: none; }
+  .paper { height: auto; width: 100%; }
+}
+</style>
+
+<header>
+  <h1>Pumpkin Night</h1>
+  <nav class="pages" id="pages" aria-label="Pick a picture"></nav>
+</header>
+<main>
+  <div class="stage"><div class="paper" id="paper">
+    <canvas id="paint" width="1000" height="1000"></canvas>
+    <canvas id="lines" width="1000" height="1000"></canvas>
+  </div></div>
+  <aside class="tray" aria-label="Crayons and tools">
+    <div class="group example"><div class="label">Example</div><img id="example" alt="Finished example of this picture"></div>
+    <div class="group crayons"><div class="label">Crayons</div><div class="colors" id="colors"></div></div>
+    <div class="group"><div class="label">Tools</div><div class="row">
+      <button class="tool" id="t-fill" aria-pressed="true">🪣 Fill</button>
+      <button class="tool" id="t-brush" aria-pressed="false">🖍️ Draw</button>
+      <button class="tool" id="t-erase" aria-pressed="false">🧽 Erase</button>
+    </div></div>
+    <div class="group"><div class="label">Brush size</div><div class="row" id="sizes"></div></div>
+    <div class="group"><div class="row">
+      <button class="act" id="undo">↶ Undo</button>
+      <button class="act" id="clear">Start over</button>
+      <button class="act" id="save">Save picture</button>
+    </div></div>
+  </aside>
+</main>
+
+<script>
+// Line art: closed shapes with thick strokes so the fill bucket stays inside each part.
+const S = 'fill="none" stroke="#23324a" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"';
+const PAGES = [
+  { name: "Pumpkin", svg: `
+    <path ${S} d="M500 300 C300 270 170 400 180 580 C190 780 340 860 500 850 C660 860 810 780 820 580 C830 400 700 270 500 300 Z"/>
+    <path ${S} d="M465 305 L455 200 Q500 185 545 200 L535 305"/>
+    <path ${S} d="M540 230 C600 190 660 210 680 250 C630 260 580 255 540 230 Z"/>
+    <path ${S} d="M350 470 L420 470 L385 410 Z"/><path ${S} d="M580 470 L650 470 L615 410 Z"/>
+    <path ${S} d="M480 560 L520 560 L500 525 Z"/>
+    <path ${S} d="M330 630 Q500 780 670 630 L620 650 L590 620 L550 660 L500 630 L450 660 L410 620 L380 650 Z"/>
+    <path ${S} d="M0 900 L1000 900"/>` },
+  { name: "Ghost", svg: `
+    <path ${S} d="M300 820 L300 420 C300 200 700 200 700 420 L700 820 L650 770 L600 820 L550 770 L500 820 L450 770 L400 820 L350 770 Z"/>
+    <path ${S} d="M300 520 C230 500 200 560 220 600 C250 600 280 580 300 580"/>
+    <path ${S} d="M700 520 C770 500 800 560 780 600 C750 600 720 580 700 580"/>
+    <ellipse ${S} cx="420" cy="430" rx="35" ry="50"/><ellipse ${S} cx="580" cy="430" rx="35" ry="50"/>
+    <ellipse ${S} cx="500" cy="580" rx="40" ry="55"/>
+    <circle ${S} cx="830" cy="170" r="80"/>` },
+  { name: "Witch hat", svg: `
+    <path ${S} d="M345 700 C390 520 440 330 580 150 C590 300 620 500 655 700 Z"/>
+    <path ${S} d="M362 640 L640 640"/>
+    <rect ${S} x="465" y="648" width="70" height="44" rx="6"/>
+    <ellipse ${S} cx="500" cy="760" rx="330" ry="60"/>
+    <path ${S} d="M180 200 L195 240 L235 240 L203 265 L215 305 L180 280 L145 305 L157 265 L125 240 L165 240 Z"/>
+    <path ${S} d="M820 330 L832 360 L862 360 L838 378 L847 408 L820 390 L793 408 L802 378 L778 360 L808 360 Z"/>` },
+  { name: "Black cat", svg: `
+    <ellipse ${S} cx="500" cy="680" rx="200" ry="190"/>
+    <circle ${S} cx="500" cy="400" r="140"/>
+    <path ${S} d="M380 330 L370 200 L450 270"/><path ${S} d="M620 330 L630 200 L550 270"/>
+    <ellipse ${S} cx="450" cy="390" rx="28" ry="38"/><ellipse ${S} cx="550" cy="390" rx="28" ry="38"/>
+    <path ${S} d="M485 440 L515 440 L500 458 Z"/>
+    <path ${S} d="M430 450 L340 430 M430 465 L340 480 M570 450 L660 430 M570 465 L660 480"/>
+    <path ${S} d="M680 750 C820 760 850 600 780 560 C760 590 790 700 680 700"/>
+    <circle ${S} cx="820" cy="170" r="90"/>
+    <path ${S} d="M0 870 L1000 870"/>` },
+  { name: "Bat", svg: `
+    <path ${S} d="M440 470 C380 380 250 330 120 380 C170 420 180 470 170 520 C220 490 260 500 290 540 C320 500 370 500 440 560"/>
+    <path ${S} d="M560 470 C620 380 750 330 880 380 C830 420 820 470 830 520 C780 490 740 500 710 540 C680 500 630 500 560 560"/>
+    <ellipse ${S} cx="500" cy="510" rx="75" ry="120"/>
+    <circle ${S} cx="500" cy="380" r="65"/>
+    <path ${S} d="M455 350 L440 270 L485 318"/><path ${S} d="M545 350 L560 270 L515 318"/>
+    <circle ${S} cx="478" cy="375" r="14"/><circle ${S} cx="522" cy="375" r="14"/>
+    <circle ${S} cx="820" cy="800" r="90"/>` },
+  { name: "Haunted house", svg: `
+    <path ${S} d="M300 450 L700 450 L700 850 L300 850 Z"/>
+    <path ${S} d="M260 450 L500 220 L740 450 Z"/>
+    <path ${S} d="M450 850 L450 720 Q500 670 550 720 L550 850"/>
+    <rect ${S} x="350" y="520" width="80" height="80"/><rect ${S} x="570" y="520" width="80" height="80"/>
+    <circle ${S} cx="500" cy="360" r="40"/>
+    <path ${S} d="M0 850 L1000 850"/>
+    <circle ${S} cx="830" cy="170" r="80"/>` },
+  { name: "Candy", svg: `
+    <ellipse ${S} cx="500" cy="500" rx="150" ry="110"/>
+    <path ${S} d="M355 470 L200 380 L230 500 L200 620 L355 530"/>
+    <path ${S} d="M645 470 L800 380 L770 500 L800 620 L645 530"/>
+    <path ${S} d="M440 399 C420 460 420 540 440 601"/><path ${S} d="M560 399 C580 460 580 540 560 601"/>
+    <circle ${S} cx="250" cy="200" r="70"/><path ${S} d="M250 270 L250 330"/>
+    <circle ${S} cx="760" cy="790" r="70"/><path ${S} d="M760 860 L760 930"/>` },
+  { name: "Spider", svg: `
+    <path ${S} d="M500 0 L500 270"/>
+    <circle ${S} cx="500" cy="490" r="120"/>
+    <circle ${S} cx="500" cy="320" r="70"/>
+    <circle ${S} cx="475" cy="315" r="16"/><circle ${S} cx="525" cy="315" r="16"/>
+    <path ${S} d="M470 350 Q500 372 530 350"/>
+    <path ${S} d="M390 440 C320 380 260 400 220 460 M383 490 C300 470 250 510 230 580 M395 545 C330 570 300 620 300 690 M430 590 C380 640 380 700 400 760"/>
+    <path ${S} d="M610 440 C680 380 740 400 780 460 M617 490 C700 470 750 510 770 580 M605 545 C670 570 700 620 700 690 M570 590 C620 640 620 700 600 760"/>
+    <path ${S} d="M40 40 L40 300 M40 40 L300 40 M40 40 L230 230 M40 140 Q100 100 140 40 M40 220 Q140 150 220 40"/>` },
+  { name: "Cauldron", svg: `
+    <path ${S} d="M260 450 C220 700 330 850 500 850 C670 850 780 700 740 450 Z"/>
+    <ellipse ${S} cx="500" cy="450" rx="260" ry="55"/>
+    <circle ${S} cx="420" cy="330" r="35"/><circle ${S} cx="530" cy="280" r="25"/><circle ${S} cx="610" cy="330" r="40"/>
+    <path ${S} d="M330 810 L300 900 L360 900 L385 835"/><path ${S} d="M670 810 L700 900 L640 900 L615 835"/>
+    <path ${S} d="M0 900 L1000 900"/>` },
+  { name: "Candy corn", svg: `
+    <path ${S} d="M500 200 C560 200 680 650 680 760 C680 820 320 820 320 760 C320 650 440 200 500 200 Z"/>
+    <path ${S} d="M400 400 Q500 425 600 400"/>
+    <path ${S} d="M340 600 Q500 640 660 600"/>` },
+  { name: "Mummy", svg: `
+    <path ${S} d="M300 300 C300 150 700 150 700 300 L700 750 C700 850 300 850 300 750 Z"/>
+    <path ${S} d="M300 380 L700 400 M300 520 L700 500 M300 660 L700 680"/>
+    <circle ${S} cx="420" cy="450" r="45"/><circle ${S} cx="580" cy="450" r="45"/>
+    <ellipse ${S} cx="500" cy="590" rx="50" ry="25"/>` },
+  { name: "Monster", svg: `
+    <path ${S} d="M320 260 L680 260 L680 780 L320 780 Z"/>
+    <path ${S} d="M320 360 L380 330 L440 370 L500 330 L560 370 L620 330 L680 360"/>
+    <rect ${S} x="260" y="560" width="60" height="60"/><rect ${S} x="680" y="560" width="60" height="60"/>
+    <circle ${S} cx="420" cy="480" r="40"/><circle ${S} cx="580" cy="480" r="40"/>
+    <path ${S} d="M400 650 L600 650 M430 632 L430 668 M500 632 L500 668 M570 632 L570 668"/>
+    <path ${S} d="M400 780 L400 880 L600 880 L600 780"/>` },
+  { name: "Treat bucket", svg: `
+    <path ${S} d="M260 450 C230 700 330 850 500 850 C670 850 770 700 740 450 Z"/>
+    <ellipse ${S} cx="500" cy="450" rx="240" ry="50"/>
+    <path ${S} d="M270 445 C270 200 730 200 730 445"/>
+    <path ${S} d="M380 580 L450 580 L415 520 Z"/><path ${S} d="M550 580 L620 580 L585 520 Z"/>
+    <path ${S} d="M400 690 Q500 770 600 690 Q500 730 400 690 Z"/>` },
+  { name: "Spooky tree", svg: `
+    <path ${S} d="M440 880 L460 600 L330 450 L360 430 L470 560 L480 380 L520 380 L530 520 L650 400 L680 420 L550 600 L560 880 Z"/>
+    <ellipse ${S} cx="505" cy="720" rx="30" ry="45"/>
+    <circle ${S} cx="800" cy="200" r="90"/>
+    <path ${S} d="M0 880 L1000 880"/>
+    <ellipse ${S} cx="770" cy="810" rx="90" ry="70"/>
+    <path ${S} d="M760 742 L760 705 L780 705 L780 742"/>` },
+  { name: "Pumpkin patch", svg: `
+    <ellipse ${S} cx="300" cy="700" rx="170" ry="130"/>
+    <ellipse ${S} cx="700" cy="720" rx="150" ry="120"/>
+    <ellipse ${S} cx="500" cy="430" rx="110" ry="90"/>
+    <path ${S} d="M290 572 L290 535 L310 535 L310 572"/>
+    <path ${S} d="M690 602 L690 565 L710 565 L710 602"/>
+    <path ${S} d="M490 342 L490 305 L510 305 L510 342"/>
+    <path ${S} d="M240 680 L280 680 L260 645 Z"/><path ${S} d="M320 680 L360 680 L340 645 Z"/>
+    <path ${S} d="M240 740 Q300 790 360 740 Z"/>
+    <circle ${S} cx="830" cy="150" r="70"/>
+    <path ${S} d="M0 880 L1000 880"/>` },
+  { name: "Blank page", blank: true, svg: `` },
+  { name: "Blank page 2", blank: true, svg: `` }
+];
+const COLORS = ["#ff7a1a","#ffb347","#ffd93d","#fff3c4","#7bc950","#2d6a4f","#9b5de5","#5a189a",
+                "#4cc9f0","#1d3557","#c8b6ff","#ff8fab","#8b5a2b","#9aa5b1","#2b2b2b","#ffffff"];
+const SIZES = [12, 28, 56];
+const [O, LO, Y, CR, G, DG, P, DP, SK, NV, LV, PK, BR, GR, K, WH] = COLORS;
+const EXAMPLES = {
+  0: [[100, 100, DP], [250, 580, O], [385, 455, Y], [615, 455, Y], [500, 550, Y], [500, 670, Y], [500, 250, BR], [610, 235, G], [500, 950, DG]],
+  1: [[100, 100, NV], [500, 350, LV], [240, 560, LV], [760, 560, LV], [420, 430, K], [580, 430, K], [500, 580, K], [830, 170, Y]],
+  2: [[100, 900, LO], [520, 400, P], [400, 670, O], [500, 670, Y], [250, 760, DP], [180, 260, Y], [820, 375, Y]],
+  3: [[100, 100, DP], [500, 780, GR], [430, 330, GR], [500, 515, GR], [385, 250, GR], [615, 250, GR], [450, 390, Y], [550, 390, Y], [500, 448, PK], [800, 640, GR], [820, 170, Y], [500, 940, DG]],
+  4: [[100, 100, LO], [300, 440, GR], [700, 440, GR], [500, 560, GR], [500, 345, GR], [500, 420, GR], [478, 375, Y], [522, 375, Y], [820, 800, Y]],
+  5: [[100, 100, NV], [330, 800, P], [320, 430, DP], [390, 560, Y], [610, 560, Y], [500, 360, Y], [500, 790, BR], [830, 170, Y], [500, 930, DG]],
+  6: [[100, 100, LV], [260, 500, O], [740, 500, O], [400, 500, P], [500, 500, Y], [600, 500, P], [250, 200, PK], [760, 790, G]],
+  7: [[800, 800, O], [500, 520, DP], [500, 290, DP], [475, 315, WH], [525, 315, WH]],
+  8: [[100, 100, O], [500, 700, GR], [500, 425, G], [500, 480, GR], [420, 330, G], [530, 280, G], [610, 330, G], [500, 950, BR]],
+  9: [[100, 100, P], [500, 300, WH], [500, 500, O], [500, 720, Y]],
+  10: [[100, 100, O], [500, 250, CR], [500, 460, CR], [400, 590, CR], [500, 750, CR], [420, 450, Y], [580, 450, Y], [500, 590, K]],
+  11: [[100, 100, O], [500, 560, G], [500, 300, K], [290, 590, GR], [710, 590, GR], [420, 480, Y], [580, 480, Y], [500, 830, DG]],
+  12: [[100, 100, P], [300, 650, O], [500, 475, O], [500, 430, BR], [415, 560, Y], [585, 560, Y], [500, 715, Y], [500, 300, P]],
+  13: [[100, 100, NV], [500, 800, BR], [505, 720, K], [800, 200, Y], [300, 940, DG], [770, 820, O], [770, 725, G]],
+  14: [[100, 100, DP], [180, 700, O], [700, 720, O], [500, 430, LO], [300, 555, G], [700, 585, G], [500, 325, G], [260, 670, Y], [340, 670, Y], [300, 755, Y], [830, 150, Y], [500, 940, DG]]
+};
+
+const paint = document.getElementById("paint"), lines = document.getElementById("lines");
+const pc = paint.getContext("2d", { willReadFrequently: true }), lc = lines.getContext("2d", { willReadFrequently: true });
+const W = paint.width, H = paint.height;
+let color = COLORS[0], size = SIZES[1], tool = "fill", page = 0, undoStack = [], boundary = null;
+const saved = {}; // paint layer per page, so switching pictures keeps the coloring
+
+const svgURL = svg => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000">${svg}</svg>`);
+
+function loadPage(i) {
+  saved[page] = pc.getImageData(0, 0, W, H);
+  page = i; undoStack = [];
+  document.querySelectorAll("#pages button").forEach((b, k) => b.setAttribute("aria-pressed", k === i));
+  pc.fillStyle = "#fff"; pc.fillRect(0, 0, W, H);
+  if (saved[i]) pc.putImageData(saved[i], 0, 0);
+  const img = new Image();
+  img.onload = () => {
+    lc.clearRect(0, 0, W, H); lc.drawImage(img, 0, 0, W, H);
+    const a = lc.getImageData(0, 0, W, H).data;
+    boundary = new Uint8Array(W * H);
+    for (let p = 0; p < W * H; p++) boundary[p] = a[p * 4 + 3] > 90 ? 1 : 0;
+  };
+  img.src = svgURL(PAGES[i].svg);
+  document.querySelector('.example').hidden = !!PAGES[i].blank;
+  exampleFor(i, src => { if (page === i) document.getElementById("example").src = src; });
+}
+
+function pushUndo() { undoStack.push(pc.getImageData(0, 0, W, H)); if (undoStack.length > 25) undoStack.shift(); }
+
+function hexRGB(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+
+function floodFill(x, y) { if (boundary) fillRegion(pc, boundary, W, H, x, y, color, 3, pushUndo); }
+
+// Scanline flood fill on a paint layer, bounded by the line art; then grows a few px under the lines to hide seams.
+function fillRegion(ctx, bnd, W, H, x, y, hex, passes, beforeWrite) {
+  const boundary = bnd;
+  x = Math.floor(x); y = Math.floor(y);
+  if (x < 0 || y < 0 || x >= W || y >= H || boundary[y * W + x]) return;
+  const img = ctx.getImageData(0, 0, W, H), d = img.data;
+  const s = (y * W + x) * 4, sr = d[s], sg = d[s + 1], sb = d[s + 2];
+  const [r, g, b] = hexRGB(hex);
+  if (Math.abs(sr - r) + Math.abs(sg - g) + Math.abs(sb - b) < 6) return;
+  const same = p => !boundary[p] && Math.abs(d[p*4]-sr) + Math.abs(d[p*4+1]-sg) + Math.abs(d[p*4+2]-sb) < 40;
+  const mask = new Uint8Array(W * H), stack = [y * W + x];
+  while (stack.length) {
+    let p = stack.pop(), px = p % W, py = (p - px) / W;
+    while (px > 0 && !mask[p - 1] && same(p - 1)) { p--; px--; }
+    let up = false, down = false;
+    for (; px < W && !mask[p] && same(p); p++, px++) {
+      mask[p] = 1;
+      if (py > 0) { const q = p - W; if (!mask[q] && same(q)) { if (!up) { stack.push(q); up = true; } } else up = false; }
+      if (py < H - 1) { const q = p + W; if (!mask[q] && same(q)) { if (!down) { stack.push(q); down = true; } } else down = false; }
+    }
+  }
+  for (let pass = 0; pass < passes; pass++) {
+    const grow = [];
+    for (let p = W; p < W * H - W; p++) if (!mask[p] && boundary[p] && (mask[p-1] || mask[p+1] || mask[p-W] || mask[p+W])) grow.push(p);
+    grow.forEach(p => mask[p] = 1);
+  }
+  if (beforeWrite) beforeWrite();
+  for (let p = 0; p < W * H; p++) if (mask[p]) { d[p*4] = r; d[p*4+1] = g; d[p*4+2] = b; d[p*4+3] = 255; }
+  ctx.putImageData(img, 0, 0);
+}
+
+// Small finished example beside each picture, colored in the app itself from these tap points (1000x1000 page space).
+const EX = 300, exCache = {};
+function exampleFor(i, done) {
+  if (exCache[i]) return done(exCache[i]);
+  const img = new Image();
+  img.onload = () => {
+    const lcv = document.createElement("canvas"); lcv.width = lcv.height = EX;
+    const lx = lcv.getContext("2d", { willReadFrequently: true }); lx.drawImage(img, 0, 0, EX, EX);
+    const a = lx.getImageData(0, 0, EX, EX).data, bnd = new Uint8Array(EX * EX);
+    for (let p = 0; p < EX * EX; p++) bnd[p] = a[p * 4 + 3] > 60 ? 1 : 0;
+    const pcv = document.createElement("canvas"); pcv.width = pcv.height = EX;
+    const px = pcv.getContext("2d", { willReadFrequently: true }); px.fillStyle = "#fff"; px.fillRect(0, 0, EX, EX);
+    (EXAMPLES[i] || []).forEach(([x, y, c]) => fillRegion(px, bnd, EX, EX, x * EX / 1000, y * EX / 1000, c, 1));
+    px.drawImage(lcv, 0, 0);
+    done(exCache[i] = pcv.toDataURL("image/png"));
+  };
+  img.src = svgURL(PAGES[i].svg);
+}
+
+function toCanvas(e) {
+  const r = paint.getBoundingClientRect();
+  return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height];
+}
+let drawing = false, last = null;
+paint.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  const [x, y] = toCanvas(e);
+  if (tool === "fill") return floodFill(x, y);
+  paint.setPointerCapture(e.pointerId);
+  pushUndo(); drawing = true; last = [x, y]; stroke(x, y);
+});
+paint.addEventListener("pointermove", e => { if (drawing) { const [x, y] = toCanvas(e); stroke(x, y); } });
+["pointerup", "pointercancel", "pointerleave"].forEach(t => paint.addEventListener(t, () => drawing = false));
+function stroke(x, y) {
+  pc.strokeStyle = tool === "erase" ? "#fff" : color;
+  pc.lineWidth = size; pc.lineCap = pc.lineJoin = "round";
+  pc.beginPath(); pc.moveTo(last[0], last[1]); pc.lineTo(x + 0.01, y); pc.stroke();
+  last = [x, y];
+}
+
+// UI
+const pagesEl = document.getElementById("pages");
+PAGES.forEach((p, i) => {
+  const b = document.createElement("button");
+  b.setAttribute("aria-label", p.name); b.innerHTML = `<img alt="" src="${svgURL(p.svg)}">`;
+  b.onclick = () => loadPage(i); pagesEl.append(b);
+});
+const colorsEl = document.getElementById("colors");
+COLORS.forEach(c => {
+  const b = document.createElement("button");
+  b.className = "crayon"; b.style.background = c; b.setAttribute("aria-label", "Color " + c);
+  b.setAttribute("aria-pressed", c === color);
+  b.onclick = () => { color = c; if (tool === "erase") setTool("fill");
+    colorsEl.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); };
+  colorsEl.append(b);
+});
+const sizesEl = document.getElementById("sizes");
+SIZES.forEach(s => {
+  const b = document.createElement("button");
+  b.className = "tool size"; b.setAttribute("aria-label", "Brush size " + s);
+  b.innerHTML = `<span style="width:${6 + s / 3}px;height:${6 + s / 3}px"></span>`;
+  b.setAttribute("aria-pressed", s === size);
+  b.onclick = () => { size = s; sizesEl.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); };
+  sizesEl.append(b);
+});
+function setTool(t) {
+  tool = t;
+  ["fill", "brush", "erase"].forEach(k => document.getElementById("t-" + k).setAttribute("aria-pressed", k === t));
+}
+["fill", "brush", "erase"].forEach(k => document.getElementById("t-" + k).onclick = () => setTool(k));
+document.getElementById("undo").onclick = () => { const s = undoStack.pop(); if (s) pc.putImageData(s, 0, 0); };
+document.getElementById("clear").onclick = () => { pushUndo(); pc.fillStyle = "#fff"; pc.fillRect(0, 0, W, H); };
+
+// Saving downloads a PNG when the file is opened on its own; inside an embedded preview downloads are blocked, so hide it there.
+const saveBtn = document.getElementById("save");
+if (window.self !== window.top) saveBtn.hidden = true;
+saveBtn.onclick = () => {
+  const out = document.createElement("canvas"); out.width = W; out.height = H;
+  const oc = out.getContext("2d"); oc.drawImage(paint, 0, 0); oc.drawImage(lines, 0, 0);
+  const a = document.createElement("a"); a.download = `my-${PAGES[page].name.toLowerCase()}.png`;
+  a.href = out.toDataURL("image/png"); a.click();
+};
+
+pc.fillStyle = "#fff"; pc.fillRect(0, 0, W, H);
+loadPage(0);
+</script>
